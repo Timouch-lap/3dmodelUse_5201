@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Аппарат 5101 — Интерактивная модель</title>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #0d1117;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: none;
+      color: #e6edf3;
+    }
+
+    model-viewer {
+      width: 100%;
+      height: 100%;
+      background-color: #0d1117;
+      --poster-color: transparent;
+    }
+
+    /* Top bar */
+    .topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 52px;
+      background: rgba(13,17,23,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      z-index: 50;
+      gap: 12px;
+    }
+    .topbar h1 {
+      font-size: 16px;
+      font-weight: 600;
+      flex: 1;
+    }
+    .status-badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    .status-ok { background: #238636; color: #fff; }
+    .status-warn { background: #9e6a03; color: #fff; }
+    .status-alarm { background: #da3633; color: #fff; }
+
+    /* Hotspot buttons on model */
+    .hotspot {
+      display: block;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 3px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.5);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .hotspot:hover, .hotspot:active {
+      transform: scale(1.25);
+    }
+    .hotspot.green { background: #3fb950; }
+    .hotspot.yellow { background: #d29922; }
+    .hotspot.red { background: #f85149; animation: pulse 1.2s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(0,0,0,0.4), 0 0 0 0 rgba(248,81,73,0.6); }
+      50% { box-shadow: 0 0 0 2px rgba(0,0,0,0.4), 0 0 0 10px rgba(248,81,73,0); }
+    }
+
+    /* Card overlay */
+    .card-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 100;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 16px;
+    }
+    .card-overlay.visible {
+      display: flex;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 380px;
+      background: #161b22;
+      border-radius: 16px 16px 12px 12px;
+      border: 1px solid #30363d;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+      animation: slideUp 0.25s ease-out;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(40px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .card-header {
+      padding: 16px 20px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .card-header .dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .card-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      flex: 1;
+    }
+    .card-close {
+      background: none;
+      border: none;
+      color: #8b949e;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px 8px;
+      line-height: 1;
+    }
+
+    .card-body {
+      padding: 0 20px 20px;
+    }
+    .value-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .value-label {
+      font-size: 14px;
+      color: #8b949e;
+    }
+    .value-number {
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .value-unit {
+      font-size: 14px;
+      color: #8b949e;
+      margin-left: 4px;
+    }
+
+    .state-text {
+      font-size: 14px;
+      margin-bottom: 20px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #21262d;
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      min-height: 52px;
+      transition: filter 0.15s;
+    }
+    .action-btn:active { filter: brightness(0.85); }
+    .action-btn.green { background: #238636; }
+    .action-btn.yellow { background: #9e6a03; }
+    .action-btn.red { background: #da3633; }
+    .action-btn.blue { background: #1f6feb; }
+
+    /* Legend */
+    .legend {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(13,17,23,0.8);
+      backdrop-filter: blur(8px);
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+      z-index: 40;
+      color: #8b949e;
+    }
+    .legend span {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Аппарат 5101</h1>
+    <div class="status-badge status-ok" id="globalStatus">Норма</div>
+  </div>
+
+  <model-viewer
+    id="model"
+    src="5201_v1.glb"
+    alt="Аппарат 5101"
+    camera-controls
+    touch-action="none"
+    shadow-intensity="1"
+    environment-image="neutral"
+    exposure="1"
+    auto-rotate
+    auto-rotate-delay="8000"
+    rotation-per-second="15deg"
+    interaction-prompt="auto"
+  >
+    <!-- Hotspots: positions are approximate, user can adjust later -->
+    <button class="hotspot green" id="hs-pump"
+      slot="hotspot-pump"
+      data-position="0.3m 0.8m 0.2m"
+      data-normal="0m 1m 0m"
+      onclick="openCard('pump')">
+    </button>
+
+    <button class="hotspot green" id="hs-valve"
+      slot="hotspot-valve"
+      data-position="-0.4m 0.5m 0.3m"
+      data-normal="0m 1m 0m"
+      onclick="openCard('valve')">
+    </button>
+
+    <button class="hotspot green" id="hs-sensor"
+      slot="hotspot-sensor"
+      data-position="0.1m 1.2m -0.1m"
+      data-normal="0m 1m 0m"
+      onclick="openCard('sensor')">
+    </button>
+  </model-viewer>
+
+  <div class="legend">
+    <span style="background:#3fb950"></span> Норма &nbsp;
+    <span style="background:#d29922"></span> Внимание &nbsp;
+    <span style="background:#f85149"></span> Авария
+  </div>
+
+  <!-- Card -->
+  <div class="card-overlay" id="overlay" onclick="if(event.target===this) closeCard()">
+    <div class="card" id="card">
+      <div class="card-header">
+        <div class="dot" id="cardDot"></div>
+        <h2 id="cardTitle">—</h2>
+        <button class="card-close" onclick="closeCard()">×</button>
+      </div>
+      <div class="card-body">
+        <div class="value-row">
+          <span class="value-label" id="cardValueLabel">Значение</span>
+          <div>
+            <span class="value-number" id="cardValue">—</span>
+            <span class="value-unit" id="cardUnit"></span>
+          </div>
+        </div>
+        <div class="state-text" id="cardState">—</div>
+        <button class="action-btn" id="cardAction" onclick="doAction()">—</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========== Simulated process data ==========
+    const elements = {
+      pump: {
+        name: "Насос подачи",
+        valueLabel: "Производительность",
+        unit: "%",
+        value: 72,
+        min: 0, max: 100,
+        state: "ok",          // ok | warn | alarm
+        running: true,
+        actionLabel: () => elements.pump.running ? "СТОП" : "ПУСК",
+        actionColor: () => elements.pump.running ? "red" : "green",
+        stateText: () => elements.pump.running
+          ? (elements.pump.state === "ok" ? "Работает в норме" :
+             elements.pump.state === "warn" ? "Повышенная нагрузка" : "АВАРИЙНАЯ ОСТАНОВКА")
+          : "Остановлен"
+      },
+      valve: {
+        name: "Клапан на линии",
+        valueLabel: "Открытие",
+        unit: "%",
+        value: 100,
+        min: 0, max: 100,
+        state: "ok",
+        open: true,
+        actionLabel: () => elements.valve.open ? "ЗАКРЫТЬ" : "ОТКРЫТЬ",
+        actionColor: () => elements.valve.open ? "yellow" : "blue",
+        stateText: () => elements.valve.open
+          ? (elements.valve.state === "ok" ? "Полностью открыт" :
+             elements.valve.state === "warn" ? "Частично открыт" : "Заклинил")
+          : "Закрыт"
+      },
+      sensor: {
+        name: "Давление на входе",
+        valueLabel: "Давление",
+        unit: "бар",
+        value: 4.2,
+        min: 0, max: 10,
+        state: "ok",
+        actionLabel: () => "СБРОС ТРЕВОГИ",
+        actionColor: () => "blue",
+        stateText: () => {
+          if (elements.sensor.state === "ok") return "Давление в норме";
+          if (elements.sensor.state === "warn") return "Давление повышенное";
+          return "КРИТИЧЕСКОЕ ДАВЛЕНИЕ";
+        }
+      }
+    };
+
+    let currentId = null;
+
+    // ========== Simulation loop ==========
+    function simulate() {
+      // Pressure slowly drifts
+      const s = elements.sensor;
+      s.value += (Math.random() - 0.48) * 0.08;
+      s.value = Math.max(2.5, Math.min(8.5, s.value));
+
+      if (s.value < 5.5) s.state = "ok";
+      else if (s.value < 7.0) s.state = "warn";
+      else s.state = "alarm";
+
+      // Pump load follows pressure a bit
+      const p = elements.pump;
+      if (p.running) {
+        p.value += (Math.random() - 0.5) * 1.5;
+        p.value = Math.max(40, Math.min(95, p.value));
+        if (p.value < 80) p.state = "ok";
+        else if (p.value < 90) p.state = "warn";
+        else p.state = "alarm";
+      } else {
+        p.value = Math.max(0, p.value - 2);
+        p.state = "ok";
+      }
+
+      // Valve
+      const v = elements.valve;
+      if (v.open) {
+        v.value = Math.min(100, v.value + 2);
+      } else {
+        v.value = Math.max(0, v.value - 3);
+      }
+      if (v.value > 80) v.state = "ok";
+      else if (v.value > 30) v.state = "warn";
+      else v.state = v.open ? "alarm" : "ok";
+
+      updateHotspots();
+      updateGlobalStatus();
+      if (currentId) refreshCard();
+    }
+
+    function updateHotspots() {
+      for (const id of ["pump", "valve", "sensor"]) {
+        const el = document.getElementById("hs-" + id);
+        el.className = "hotspot " + (elements[id].state === "ok" ? "green" :
+                                     elements[id].state === "warn" ? "yellow" : "red");
+      }
+    }
+
+    function updateGlobalStatus() {
+      const badge = document.getElementById("globalStatus");
+      const states = Object.values(elements).map(e => e.state);
+      if (states.includes("alarm")) {
+        badge.textContent = "АВАРИЯ";
+        badge.className = "status-badge status-alarm";
+      } else if (states.includes("warn")) {
+        badge.textContent = "Внимание";
+        badge.className = "status-badge status-warn";
+      } else {
+        badge.textContent = "Норма";
+        badge.className = "status-badge status-ok";
+      }
+    }
+
+    // ========== Card logic ==========
+    function openCard(id) {
+      currentId = id;
+      refreshCard();
+      document.getElementById("overlay").classList.add("visible");
+    }
+
+    function closeCard() {
+      currentId = null;
+      document.getElementById("overlay").classList.remove("visible");
+    }
+
+    function refreshCard() {
+      const e = elements[currentId];
+      if (!e) return;
+
+      document.getElementById("cardTitle").textContent = e.name;
+      document.getElementById("cardValueLabel").textContent = e.valueLabel;
+      document.getElementById("cardValue").textContent =
+        (typeof e.value === "number" && e.value % 1 !== 0) ? e.value.toFixed(1) : Math.round(e.value);
+      document.getElementById("cardUnit").textContent = e.unit;
+      document.getElementById("cardState").textContent = e.stateText();
+
+      const dot = document.getElementById("cardDot");
+      dot.style.background = e.state === "ok" ? "#3fb950" :
+                             e.state === "warn" ? "#d29922" : "#f85149";
+
+      const btn = document.getElementById("cardAction");
+      btn.textContent = e.actionLabel();
+      btn.className = "action-btn " + e.actionColor();
+    }
+
+    function doAction() {
+      const e = elements[currentId];
+      if (!e) return;
+
+      if (currentId === "pump") {
+        e.running = !e.running;
+      } else if (currentId === "valve") {
+        e.open = !e.open;
+      } else if (currentId === "sensor") {
+        // Reset pressure toward normal
+        e.value = 4.0 + Math.random();
+        e.state = "ok";
+      }
+      refreshCard();
+      updateHotspots();
+      updateGlobalStatus();
+    }
+
+    // Start simulation
+    setInterval(simulate, 800);
+    updateHotspots();
+    updateGlobalStatus();
+
+    // Stop auto-rotate when user interacts
+    const model = document.getElementById("model");
+    model.addEventListener("interact", () => {
+      model.autoRotate = false;
+    });
+  </script>
+</body>
+</html>
